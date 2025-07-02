@@ -48,6 +48,7 @@ form:
     wav: '*-mixed.wav'
     mag: '*-mixed.pt'         # Legacy 2019 format  
     features: '*-mixed-features.pt'   # NEW: VoiceFilter-Lite 2020 features
+  noise_type: '*-noise-type.pt'  # VoiceFilter-Lite 2020: noise classification labels
 
 train:
   batch_size: 8
