@@ -13,7 +13,7 @@ audio:
   num_filterbanks: 128  # PAPER SPEC: 128-dimensional LFBE
   frame_stack_size: 3   # Frame stacking for temporal context (common ASR practice)
   use_stacked_features: true  # Enable frame stacking
----
+
 model:
   # VoiceFilter-Lite 2020 ARCHITECTURE  
   # PAPER SPEC: "3 LSTM layers, each with 512 nodes"
@@ -31,12 +31,12 @@ model:
   # Legacy dimensions (kept for 2019 compatibility)
   fc1_dim: 600
   fc2_dim: 601 # num_freq
----
+
 data:
   train_dir: ''
   test_dir: ''
   audio_len: 3.0
----
+
 form:
   input: '*-norm.wav'
   dvec: '*-dvec.txt' # will be calculated on-the-fly
@@ -48,7 +48,7 @@ form:
     wav: '*-mixed.wav'
     mag: '*-mixed.pt'         # Legacy 2019 format  
     features: '*-mixed-features.pt'   # NEW: VoiceFilter-Lite 2020 features
----
+
 train:
   batch_size: 8
   num_workers: 16
@@ -63,7 +63,7 @@ train:
   # VoiceFilter-Lite 2020 LOSS PARAMETERS
   asymmetric_loss_alpha: 2.0  # PAPER: asymmetric L2 loss parameter
   noise_pred_loss_weight: 0.1 # Weight for noise type prediction loss
----
+
 # VoiceFilter-Lite 2020 ADAPTIVE SUPPRESSION
 # GOOGLE SLIDES EXACT SPECIFICATIONS
 adaptive_suppression:
@@ -80,11 +80,11 @@ adaptive_suppression:
   # 1 = overlapped speech
   clean_threshold: 0.5       # Threshold for detecting clean/non-speech
   overlapped_threshold: 0.5  # Threshold for detecting overlapped speech
----
+
 log:
   chkpt_dir: 'chkpt'
   log_dir: 'logs'
----
+
 embedder: # d-vector embedder. don't fix it!
   num_mels: 40
   n_fft: 512
