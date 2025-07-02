@@ -19,11 +19,11 @@ class VoiceFilterLite(nn.Module):
         self.hp = hp
         
         # VoiceFilter-Lite 2020 ARCHITECTURE
-        # PAPER: "By reducing each LSTM layer to only 256 nodes, the model size becomes 2.2 MB"
+        # PAPER: "3 LSTM layers, each with 512 nodes" (then quantized to 2.2MB)
         self.input_dim = hp.model.input_dim  # 384 (128 filterbanks × 3 stacked frames)
         self.embedding_dim = hp.embedder.emb_dim  # 256 (d-vector dimension)
-        self.lstm_dim = 256  # CRITICAL: 256 nodes for 2.2MB target
-        self.lstm_layers = 3  # 3 layers per paper
+        self.lstm_dim = hp.model.lstm_dim  # 512 nodes per paper (from config)
+        self.lstm_layers = hp.model.lstm_layers  # 3 layers per paper
         
         # Combined input dimension: features + speaker embedding
         combined_input_dim = self.input_dim + self.embedding_dim  # 384 + 256 = 640
@@ -31,7 +31,7 @@ class VoiceFilterLite(nn.Module):
         # PAPER: "most of our models actually remove these CNN layers"
         # No CNN layer - direct input to LSTM
         
-        # PAPER: "3 LSTM layers, each with 256 nodes"
+        # PAPER: "3 LSTM layers, each with 512 nodes"
         self.lstm_stack = nn.ModuleList([
             nn.LSTM(
                 input_size=combined_input_dim if i == 0 else self.lstm_dim,
