@@ -28,21 +28,16 @@ def setup_colab_environment():
     if not IN_COLAB:
         return
     
-    print("📦 Setting up Colab environment...")
+    print("📦 Setting up Colab anvironment...")
     
-    # Install dependencies
+    # Install dependencies, including speechbrain for the new embedder
     os.system("pip install -q torch torchvision torchaudio")
-    os.system("pip install -q librosa mir_eval pyyaml tensorboardX")
+    os.system("pip install -q librosa mir_eval pyyaml tensorboardX speechbrain")
     
     # Download LibriSpeech sample data (smaller subset for Colab)
     print("📥 Downloading LibriSpeech sample data...")
     os.system("wget -q http://www.openslr.org/resources/12/dev-clean.tar.gz")
     os.system("tar -xzf dev-clean.tar.gz")
-    
-    # Download pretrained speaker embedder
-    print("🎤 Downloading pretrained speaker embedder...")
-    embedder_url = "https://drive.google.com/uc?id=1YFmhmUok-W76JkrfA0fzQt3c-ZsfiwfL"
-    os.system(f"gdown {embedder_url} -O embedder.pt")
     
     print("✅ Colab environment ready!")
 
@@ -52,6 +47,7 @@ def load_config():
         # Model architecture (VoiceFilter-Lite 2020)
         'model': {
             'input_dim': 384,  # 128 filterbanks × 3 stacked frames
+            'mask_dim': 128,  # Mask output dimension
             'lstm_layers': 3,
             'lstm_dim': 512,
             'speaker_embed_dim': 256,
@@ -86,7 +82,6 @@ def load_config():
         # Paths
         'paths': {
             'data_dir': './LibriSpeech/dev-clean' if IN_COLAB else './data',
-            'embedder_path': './embedder.pt',
             'checkpoint_dir': './checkpoints',
             'log_dir': './logs',
         }
@@ -112,7 +107,8 @@ class VoiceFilterLite2020Trainer:
     def setup_model(self):
         """Initialize VoiceFilter-Lite 2020 model"""
         from model.model import VoiceFilterLite2020
-        
+        from speechbrain.inference.speaker import EncoderClassifier
+
         self.model = VoiceFilterLite2020(
             input_dim=self.config['model']['input_dim'],
             lstm_layers=self.config['model']['lstm_layers'],
@@ -121,15 +117,17 @@ class VoiceFilterLite2020Trainer:
             num_noise_classes=self.config['model']['noise_classes']
         ).to(self.device)
         
-        # Load pretrained speaker embedder
-        embedder_path = self.config['paths']['embedder_path']
-        if os.path.exists(embedder_path):
-            print(f"📎 Loading pretrained speaker embedder from {embedder_path}")
-            self.speaker_embedder = torch.load(embedder_path, map_location=self.device)
-            self.speaker_embedder.eval()
-        else:
-            print("⚠️ No pretrained embedder found, using random initialization")
-            self.speaker_embedder = None
+        # Load multilingual pretrained speaker embedder from TalTechNLP/HuggingFace
+        print("📎 Loading multilingual speaker embedder from TalTechNLP...")
+        self.speaker_embedder = EncoderClassifier.from_hparams(
+            source="TalTechNLP/voxlingua107-epaca-tdnn", 
+            savedir="pretrained_models/lang-id-voxlingua107-ecapa",
+            run_opts={"device": self.device}
+        )
+        # Freeze the speaker embedder's weights
+        for param in self.speaker_embedder.parameters():
+            param.requires_grad = False
+        self.speaker_embedder.eval()
         
         print(f"🧠 Model parameters: {sum(p.numel() for p in self.model.parameters()):,}")
         
@@ -194,16 +192,13 @@ class VoiceFilterLite2020Trainer:
             noise_type = batch['noise_type'].to(self.device)
             
             # Get speaker embeddings
-            if self.speaker_embedder:
-                with torch.no_grad():
-                    speaker_embed = self.speaker_embedder(reference_audio)
-            else:
-                # Use dummy embeddings for testing
-                speaker_embed = torch.randn(
-                    mixed_features.size(0), 
-                    self.config['model']['speaker_embed_dim']
-                ).to(self.device)
-            
+            with torch.no_grad():
+                # The SpeechBrain model expects a tensor and its length.
+                # We need to unsqueeze to add a batch dimension.
+                speaker_embed = self.speaker_embedder.encode_batch(reference_audio)
+                # The output has an extra dimension, so we squeeze it.
+                speaker_embed = speaker_embed.squeeze(1)
+
             # Forward pass
             enhanced_features, noise_pred = self.model(mixed_features, speaker_embed)
             

@@ -7,9 +7,9 @@ class VoiceFilterLite(nn.Module):
     """
     VoiceFilter-Lite 2020 Implementation
     
-    GOOGLE SLIDES SPECS:
+    PAPER SPECS:
     - Input: 128D stacked filterbank features (384D with 3x stacking)
-    - Architecture: 1D CNN + 3 uni-directional LSTM layers, 512 nodes each
+    - Architecture: 3 uni-directional LSTM layers, 256 nodes each (for 2.2MB size)
     - Dual outputs: soft mask + noise type prediction (2x64 layers)
     - Streaming-compatible (no future context)
     - Adaptive suppression with dynamic mixing
@@ -19,29 +19,22 @@ class VoiceFilterLite(nn.Module):
         self.hp = hp
         
         # VoiceFilter-Lite 2020 ARCHITECTURE
-        # GOOGLE SLIDES: "3 LSTM layers, each with 512 nodes"
+        # PAPER: "By reducing each LSTM layer to only 256 nodes, the model size becomes 2.2 MB"
         self.input_dim = hp.model.input_dim  # 384 (128 filterbanks × 3 stacked frames)
         self.embedding_dim = hp.embedder.emb_dim  # 256 (d-vector dimension)
-        self.lstm_dim = hp.model.lstm_dim  # 512 per slides
-        self.lstm_layers = hp.model.lstm_layers  # 3 per slides
+        self.lstm_dim = 256  # CRITICAL: 256 nodes for 2.2MB target
+        self.lstm_layers = 3  # 3 layers per paper
         
         # Combined input dimension: features + speaker embedding
         combined_input_dim = self.input_dim + self.embedding_dim  # 384 + 256 = 640
         
-        # GOOGLE SLIDES: 1D CNN before LSTM (from architecture diagram slide 13)
-        self.conv1d = nn.Conv1d(
-            in_channels=combined_input_dim,
-            out_channels=self.lstm_dim,  # 512 to match LSTM input
-            kernel_size=3,
-            padding=1,
-            stride=1
-        )
+        # PAPER: "most of our models actually remove these CNN layers"
+        # No CNN layer - direct input to LSTM
         
-        # GOOGLE SLIDES: "3 LSTM layers, each with 512 nodes"
-        # NOTE: Using uni-directional LSTM for streaming requirement
+        # PAPER: "3 LSTM layers, each with 256 nodes"
         self.lstm_stack = nn.ModuleList([
             nn.LSTM(
-                input_size=self.lstm_dim,  # All layers now 512→512 after CNN
+                input_size=combined_input_dim if i == 0 else self.lstm_dim,
                 hidden_size=self.lstm_dim,
                 num_layers=1,
                 batch_first=True,
@@ -54,17 +47,16 @@ class VoiceFilterLite(nn.Module):
         
         # DUAL OUTPUT SYSTEM (VoiceFilter-Lite 2020)
         # Output 1: Soft mask for speech separation
-        # GOOGLE SLIDES: "1 feedforward layer with sigmoid activation for mask prediction"
+        # PAPER: "1 feedforward layer with sigmoid activation for mask prediction"
         self.mask_head = nn.Sequential(
-            nn.Linear(self.lstm_dim, hp.model.mask_dim),  # 512→128 (direct)
+            nn.Linear(self.lstm_dim, hp.model.mask_dim),  # 256→128 (direct)
             nn.Sigmoid()  # Soft mask values [0, 1]
         )
         
         # Output 2: Noise type prediction
-        # GOOGLE SLIDES: "2 feedforward layers, each with 64 nodes for noise type prediction"
-        # CRITICAL FIX: Exactly 2 layers with 64 nodes each
+        # PAPER: "2 feedforward layers, each with 64 nodes for noise type prediction"
         self.noise_predictor = nn.Sequential(
-            nn.Linear(self.lstm_dim, 64),      # 512→64 (first 64-node layer)
+            nn.Linear(self.lstm_dim, 64),      # 256→64 (first 64-node layer)
             nn.ReLU(),
             nn.Dropout(0.1),
             nn.Linear(64, 64),                 # 64→64 (second 64-node layer)
@@ -75,7 +67,6 @@ class VoiceFilterLite(nn.Module):
         )
         
         # ADAPTIVE SUPPRESSION (VoiceFilter-Lite 2020)
-        # GOOGLE SLIDES: "adaptively adjusts the suppression strength according to this prediction"
         self.adaptive_suppression = AdaptiveSuppression(hp)
         
         # Initialize weights
@@ -116,39 +107,23 @@ class VoiceFilterLite(nn.Module):
         batch_size, time_steps, feature_dim = features.shape
         
         # Expand d-vector to match time dimension
-        # dvec: [B, 256] -> [B, T, 256]
         dvec_expanded = dvec.unsqueeze(1).repeat(1, time_steps, 1)
         
         # Concatenate features with speaker embedding
-        # GOOGLE SLIDES: Frame-wise concatenation with d-vector
         x = torch.cat([features, dvec_expanded], dim=-1)  # [B, T, 640]
         
-        # GOOGLE SLIDES: 1D CNN processing
-        # Convert to [B, C, T] for Conv1d
-        x = x.transpose(1, 2)  # [B, 640, T]
-        x = self.conv1d(x)     # [B, 512, T]
-        x = F.relu(x)
-        # Convert back to [B, T, C] for LSTM
-        x = x.transpose(1, 2)  # [B, T, 512]
-        
+        # PAPER: No CNN, direct LSTM processing
         # Pass through LSTM stack
-        # GOOGLE SLIDES: "3 LSTM layers, each with 512 nodes"
         hidden_states = []
         for i, lstm_layer in enumerate(self.lstm_stack):
-            x, _ = lstm_layer(x)  # [B, T, 512]
+            x, _ = lstm_layer(x)  # [B, T, 256]
             x = self.dropout(x)
             hidden_states.append(x)
         
-        # x is now [B, T, 512] after final LSTM layer
+        # x is now [B, T, 256] after final LSTM layer
         
         # DUAL OUTPUT SYSTEM
-        # Output 1: Soft mask for speech separation
         mask = self.mask_head(x)  # [B, T, 128]
-        
-        # Output 2: Noise type prediction  
-        # GOOGLE SLIDES CLASSIFICATION:
-        # 0 = clean speech or containing non-speech noise
-        # 1 = overlapped speech
         noise_pred = self.noise_predictor(x)  # [B, T, 2]
         
         return mask, noise_pred
@@ -156,7 +131,7 @@ class VoiceFilterLite(nn.Module):
     def separate_speech(self, features, dvec, apply_adaptive_suppression=True):
         """
         VoiceFilter-Lite 2020: Complete speech separation with adaptive suppression
-        GOOGLE SLIDES: "adaptively adjusts the suppression strength according to this prediction"
+        PAPER: "adaptively adjusts the suppression strength according to this prediction"
         
         Returns enhanced features for direct ASR input
         """
@@ -166,7 +141,7 @@ class VoiceFilterLite(nn.Module):
         enhanced_features = self._apply_mask_to_stacked_features(features, mask)
         
         if apply_adaptive_suppression:
-            # GOOGLE SLIDES: Adaptive suppression based on noise type prediction
+            # PAPER: Adaptive suppression based on noise type prediction
             final_features = self.adaptive_suppression(
                 original_features=features,
                 enhanced_features=enhanced_features,
@@ -203,11 +178,11 @@ class AdaptiveSuppression(nn.Module):
     """
     VoiceFilter-Lite 2020 Adaptive Suppression Module
     
-    GOOGLE SLIDES EXACT FORMULA:
+    PAPER EXACT FORMULA:
     w^(t) = β · w^(t-1) + (1-β) · (a · f_adapt(S_in^(t)) + b)
     S_out = w · S_enh + (1-w) · S_in
     
-    NOISE TYPE CLASSIFICATION (GOOGLE SLIDES):
+    NOISE TYPE CLASSIFICATION (PAPER):
     0 = clean speech, or containing non-speech noise
     1 = overlapped speech
     """
@@ -215,13 +190,13 @@ class AdaptiveSuppression(nn.Module):
         super(AdaptiveSuppression, self).__init__()
         self.hp = hp
         
-        # GOOGLE SLIDES: Moving average parameters
+        # PAPER: Moving average parameters
         # w^(t) = β · w^(t-1) + (1-β) · (a · f_adapt(S_in^(t)) + b)
         self.beta = getattr(hp.adaptive_suppression, 'beta', 0.9)    # β ∈ [0,1]
         self.alpha = getattr(hp.adaptive_suppression, 'alpha', 1.0)  # a > 0
         self.bias = getattr(hp.adaptive_suppression, 'bias', 0.0)    # b ≥ 0
         
-        # Validate constraints from Google slides
+        # Validate constraints from paper
         assert 0.0 <= self.beta <= 1.0, f"β must be in [0,1], got {self.beta}"
         assert self.alpha > 0.0, f"a must be > 0, got {self.alpha}"
         assert self.bias >= 0.0, f"b must be ≥ 0, got {self.bias}"
@@ -231,7 +206,7 @@ class AdaptiveSuppression(nn.Module):
         
     def forward(self, original_features, enhanced_features, noise_pred):
         """
-        GOOGLE SLIDES EXACT FORMULA:
+        PAPER EXACT FORMULA:
         w^(t) = β · w^(t-1) + (1-β) · (a · f_adapt(S_in^(t)) + b)
         S_out = w · S_enh + (1-w) · S_in
         
@@ -246,10 +221,10 @@ class AdaptiveSuppression(nn.Module):
         batch_size, time_steps, feature_dim = original_features.shape
         
         # Extract overlapped speech probability (index 1)
-        # GOOGLE SLIDES: Higher overlapped speech prob → stronger suppression
+        # PAPER: Higher overlapped speech prob → stronger suppression
         overlapped_speech_prob = noise_pred[:, :, 1]  # [B, T]
         
-        # GOOGLE SLIDES EXACT FORMULA: f_adapt(S_in^(t))
+        # PAPER EXACT FORMULA: f_adapt(S_in^(t))
         f_adapt = overlapped_speech_prob  # This is the f_adapt function
         
         # Linear transform: a · f_adapt(S_in^(t)) + b
@@ -258,7 +233,7 @@ class AdaptiveSuppression(nn.Module):
         # Clamp to reasonable range [0, 1]
         linear_transform = torch.clamp(linear_transform, 0.0, 1.0)
         
-        # GOOGLE SLIDES EXACT FORMULA: Moving average
+        # PAPER EXACT FORMULA: Moving average
         # w^(t) = β · w^(t-1) + (1-β) · (a · f_adapt(S_in^(t)) + b)
         if self.training:
             # During training, compute batch-wise weights
@@ -270,7 +245,7 @@ class AdaptiveSuppression(nn.Module):
             # Update state for next frame
             self.prev_weight = current_weight.mean().detach()
         
-        # GOOGLE SLIDES EXACT FORMULA: Dynamic mixing
+        # PAPER EXACT FORMULA: Dynamic mixing
         # S_out = w · S_enh + (1-w) · S_in
         # Expand weight to match feature dimensions
         weight = current_weight.unsqueeze(-1)  # [B, T, 1]
