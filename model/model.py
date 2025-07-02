@@ -28,13 +28,19 @@ class VoiceFilterLite(nn.Module):
         # Combined input dimension: features + speaker embedding
         combined_input_dim = self.input_dim + self.embedding_dim  # 384 + 256 = 640
         
-        # PAPER: "most of our models actually remove these CNN layers"
-        # No CNN layer - direct input to LSTM
+        # 1D CNN layer as shown in Google slides architecture diagram
+        # Input: [B, T, 640] → reshape to [B, 640, T] for conv1d
+        self.conv1d = nn.Conv1d(
+            in_channels=combined_input_dim,  # 640
+            out_channels=self.lstm_dim,      # 512 
+            kernel_size=3,
+            padding=1
+        )
         
         # PAPER: "3 LSTM layers, each with 512 nodes"
         self.lstm_stack = nn.ModuleList([
             nn.LSTM(
-                input_size=combined_input_dim if i == 0 else self.lstm_dim,
+                input_size=self.lstm_dim,  # CNN outputs 512, all LSTM layers use 512
                 hidden_size=self.lstm_dim,
                 num_layers=1,
                 batch_first=True,
@@ -112,7 +118,14 @@ class VoiceFilterLite(nn.Module):
         # Concatenate features with speaker embedding
         x = torch.cat([features, dvec_expanded], dim=-1)  # [B, T, 640]
         
-        # PAPER: No CNN, direct LSTM processing
+        # 1D CNN processing (Google slides architecture)
+        # Reshape for conv1d: [B, T, 640] → [B, 640, T]
+        x = x.transpose(1, 2)  # [B, 640, T]
+        x = self.conv1d(x)     # [B, 512, T]  
+        x = F.relu(x)
+        # Reshape back: [B, 512, T] → [B, T, 512]
+        x = x.transpose(1, 2)  # [B, T, 512]
+        
         # Pass through LSTM stack
         hidden_states = []
         for i, lstm_layer in enumerate(self.lstm_stack):
