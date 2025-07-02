@@ -130,8 +130,16 @@ def train(args, pt_dir, chkpt_path, trainloader, testloader, writer, logger, hp,
                 # Note: mask is 128D, features are 384D (stacked)
                 enhanced_features = model._apply_mask_to_stacked_features(mixed_features, mask)
 
-                # VoiceFilter-Lite 2020: Asymmetric L2 loss for separation
-                separation_loss = asymmetric_l2_loss(enhanced_features, target_features, alpha)
+                # VoiceFilter-Lite 2020: For loss calculation, we need to compare like-with-like
+                # Convert target_features to stacked format or compare in base filterbank space
+                if target_features.shape[-1] == 128:  # target is base filterbank
+                    # Stack target features to match enhanced_features dimension
+                    batch_size, time_steps, base_dim = target_features.shape
+                    target_stacked = target_features.unsqueeze(2).repeat(1, 1, 3, 1)  # [B, T, 3, 128]
+                    target_stacked = target_stacked.view(batch_size, time_steps, -1)  # [B, T, 384]
+                    separation_loss = asymmetric_l2_loss(enhanced_features, target_stacked, alpha)
+                else:  # target is already stacked
+                    separation_loss = asymmetric_l2_loss(enhanced_features, target_features, alpha)
                 
                 # Generate noise type labels for training
                 noise_labels = generate_noise_labels(target_features, mixed_features)

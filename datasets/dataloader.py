@@ -96,8 +96,8 @@ class VFDataset(Dataset):
         if self.train: # need to be fast
             if self.use_features_2020:
                 # VoiceFilter-Lite 2020: Load preprocessed filterbank features
-                target_features = torch.load(self.target_features_list[idx])
-                mixed_features = torch.load(self.mixed_features_list[idx])
+                target_features = torch.load(self.target_features_list[idx]).float()
+                mixed_features = torch.load(self.mixed_features_list[idx]).float()
                 return dvec_mel, target_features, mixed_features
             else:
                 # Legacy 2019: Load magnitude spectrograms and convert to features
@@ -114,8 +114,8 @@ class VFDataset(Dataset):
                 return dvec_mel, target_features, mixed_features
         else:
             # Test mode: always compute features from audio
-            target_wav, _ = librosa.load(self.target_wav_list[idx], self.hp.audio.sample_rate)
-            mixed_wav, _ = librosa.load(self.mixed_wav_list[idx], self.hp.audio.sample_rate)
+            target_wav, _ = librosa.load(self.target_wav_list[idx], sr=self.hp.audio.sample_rate)
+            mixed_wav, _ = librosa.load(self.mixed_wav_list[idx], sr=self.hp.audio.sample_rate)
             
             # VoiceFilter-Lite 2020: Extract filterbank features
             target_features = self.audio.wav2features(target_wav)

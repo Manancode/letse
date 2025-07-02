@@ -2,6 +2,7 @@ torch>=2.0.0
 torchaudio>=2.0.0
 numpy>=1.21.0
 librosa>=0.8.1
+soundfile>=0.12.1
 PyYAML>=6.0
 easydict
 tensorboard
@@ -10,3 +11,4 @@ mir_eval
 Pillow
 tqdm
 ffmpeg-python
+tensorboardX

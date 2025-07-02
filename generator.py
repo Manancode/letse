@@ -4,6 +4,7 @@ import tqdm
 import torch
 import random
 import librosa
+import soundfile as sf
 import argparse
 import numpy as np
 from multiprocessing import Pool, cpu_count
@@ -63,8 +64,8 @@ def mix_voicefilter_lite_2020(hp, args, audio, num, s1_dvec, s1_target, s2, trai
     # Save wav files
     target_wav_path = formatter(dir_, hp.form.target.wav, num)
     mixed_wav_path = formatter(dir_, hp.form.mixed.wav, num)
-    librosa.output.write_wav(target_wav_path, w1, srate)
-    librosa.output.write_wav(mixed_wav_path, mixed, srate)
+    sf.write(target_wav_path, w1, srate)
+    sf.write(mixed_wav_path, mixed, srate)
 
     # VoiceFilter-Lite 2020: Generate filterbank features instead of spectrograms
     try:
