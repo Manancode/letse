@@ -121,7 +121,7 @@ class VoiceFilterLite(nn.Module):
         # 1D CNN processing (Google slides architecture)
         # Reshape for conv1d: [B, T, 640] → [B, 640, T]
         x = x.transpose(1, 2)  # [B, 640, T]
-        x = self.conv1d(x)     # [B, 512, T]  
+        x = self.conv1d(x)     # [B, 512, T]
         x = F.relu(x)
         # Reshape back: [B, 512, T] → [B, T, 512]
         x = x.transpose(1, 2)  # [B, T, 512]

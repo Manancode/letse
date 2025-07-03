@@ -190,12 +190,12 @@ if __name__ == '__main__':
         mix_func(hp, args, audio, num, s1_dvec, s1_target, s2, train=False)
 
     print(f"📊 Generating training data...")
-    arr = list(range(10**5))
+    arr = list(range(100000))  # 100k training samples for production
     with Pool(cpu_num) as p:
         r = list(tqdm.tqdm(p.imap(train_wrapper, arr), total=len(arr)))
 
     print(f"📊 Generating test data...")
-    arr = list(range(10**2))
+    arr = list(range(1000))    # 1k test samples for production
     with Pool(cpu_num) as p:
         r = list(tqdm.tqdm(p.imap(test_wrapper, arr), total=len(arr)))
 

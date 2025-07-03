@@ -101,8 +101,8 @@ class VFDataset(Dataset):
                 return dvec_mel, target_features, mixed_features
             else:
                 # Legacy 2019: Load magnitude spectrograms and convert to features
-                target_mag = torch.load(self.target_mag_list[idx])
-                mixed_mag = torch.load(self.mixed_mag_list[idx])
+            target_mag = torch.load(self.target_mag_list[idx])
+            mixed_mag = torch.load(self.mixed_mag_list[idx])
                 
                 # Convert spectrograms to features on-the-fly (slower but works)
                 target_features = self._spec_to_features(target_mag.numpy())
