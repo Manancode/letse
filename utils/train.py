@@ -7,7 +7,7 @@ import traceback
 from .adabound import AdaBound
 from .audio import Audio
 from .evaluation import validate
-from model.model import VoiceFilter
+from model.model import VoiceFilterLite
 from model.embedder import SpeechEmbedder
 
 
@@ -73,7 +73,7 @@ def train(args, pt_dir, chkpt_path, trainloader, testloader, writer, logger, hp,
     embedder.eval()
 
     audio = Audio(hp)
-    model = VoiceFilter(hp).cuda()
+    model = VoiceFilterLite(hp).cuda()
     if hp.train.optimizer == 'adabound':
         optimizer = AdaBound(model.parameters(),
                              lr=hp.train.adabound.initial,
