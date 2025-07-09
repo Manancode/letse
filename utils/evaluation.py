@@ -90,6 +90,9 @@ def validate(audio, model, embedder, testloader, writer, step, hp):
     
     print(f"Validation - Separation Loss: {avg_separation_loss:.4f}, "
           f"Noise Loss: {avg_noise_loss:.4f}")
+    
+    # FIX: Restore model to training mode after validation
+    model.train()
 
 
 def features_to_audio_approximation(enhanced_features, audio, hp):
