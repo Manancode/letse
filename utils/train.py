@@ -116,12 +116,14 @@ def train(args, pt_dir, chkpt_path, trainloader, testloader, writer, logger, hp,
                 mixed_features = mixed_features.cuda()
 
                 dvec_list = list()
-                for mel in dvec_mels:
-                    mel = mel.cuda()
-                    dvec = embedder(mel)
-                    dvec_list.append(dvec)
+                # FIX: Use no_grad to prevent LSTM eval mode error
+                with torch.no_grad():
+                    for mel in dvec_mels:
+                        mel = mel.cuda()
+                        dvec = embedder(mel)
+                        dvec_list.append(dvec)
                 dvec = torch.stack(dvec_list, dim=0)
-                dvec = dvec.detach()
+                # No need for .detach() since we used no_grad()
 
                 # VoiceFilter-Lite 2020: Get dual outputs
                 mask, noise_pred = model(mixed_features, dvec)
