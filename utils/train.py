@@ -139,7 +139,7 @@ def train(args, pt_dir, chkpt_path, trainloader, testloader, writer, logger, hp,
                     target_stacked = target_stacked.view(batch_size, time_steps, -1)  # [B, T, 384]
                     separation_loss = asymmetric_l2_loss(enhanced_features, target_stacked, alpha)
                 else:  # target is already stacked
-                separation_loss = asymmetric_l2_loss(enhanced_features, target_features, alpha)
+                    separation_loss = asymmetric_l2_loss(enhanced_features, target_features, alpha)
                 
                 # Generate noise type labels for training
                 noise_labels = generate_noise_labels(target_features, mixed_features)
