@@ -44,12 +44,26 @@ def create_dataloader(hp, args, train):
 class VFDataset(Dataset):
     def __init__(self, hp, args, train):
         def find_all(file_format):
-            return sorted(glob.glob(os.path.join(self.data_dir, file_format)))
+            search_path = os.path.join(self.data_dir, file_format)
+            results = sorted(glob.glob(search_path))
+            print(f"🔍 DEBUG: Searching for '{file_format}' in '{self.data_dir}'")
+            print(f"🔍 DEBUG: Full search path: '{search_path}'")
+            print(f"🔍 DEBUG: Found {len(results)} files")
+            if len(results) > 0:
+                print(f"🔍 DEBUG: First few files: {results[:5]}")
+            return results
             
         self.hp = hp
         self.args = args
         self.train = train
         self.data_dir = hp.data.train_dir if train else hp.data.test_dir
+        
+        print(f"🔍 DEBUG: Dataset mode: {'TRAIN' if train else 'TEST'}")
+        print(f"🔍 DEBUG: Data directory: '{self.data_dir}'")
+        print(f"🔍 DEBUG: Directory exists: {os.path.exists(self.data_dir)}")
+        if os.path.exists(self.data_dir):
+            all_files = os.listdir(self.data_dir)[:10]  # Show first 10 files
+            print(f"🔍 DEBUG: Files in directory: {all_files}")
 
         self.dvec_list = find_all(hp.form.dvec)
         self.target_wav_list = find_all(hp.form.target.wav)
