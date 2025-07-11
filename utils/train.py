@@ -118,10 +118,10 @@ def train(args, pt_dir, chkpt_path, trainloader, testloader, writer, logger, hp,
                 dvec_list = list()
                 # FIX: Use no_grad to prevent LSTM eval mode error
                 with torch.no_grad():
-                    for mel in dvec_mels:
-                        mel = mel.cuda()
-                        dvec = embedder(mel)
-                        dvec_list.append(dvec)
+                for mel in dvec_mels:
+                    mel = mel.cuda()
+                    dvec = embedder(mel)
+                    dvec_list.append(dvec)
                 dvec = torch.stack(dvec_list, dim=0)
                 # No need for .detach() since we used no_grad()
 
@@ -141,7 +141,7 @@ def train(args, pt_dir, chkpt_path, trainloader, testloader, writer, logger, hp,
                     target_stacked = target_stacked.view(batch_size, time_steps, -1)  # [B, T, 384]
                     separation_loss = asymmetric_l2_loss(enhanced_features, target_stacked, alpha)
                 else:  # target is already stacked
-                    separation_loss = asymmetric_l2_loss(enhanced_features, target_features, alpha)
+                separation_loss = asymmetric_l2_loss(enhanced_features, target_features, alpha)
                 
                 # Generate noise type labels for training
                 noise_labels = generate_noise_labels(target_features, mixed_features)
@@ -168,17 +168,22 @@ def train(args, pt_dir, chkpt_path, trainloader, testloader, writer, logger, hp,
 
                 # write loss to tensorboard
                 if step % hp.train.summary_interval == 0:
-                    writer.log_training(total_loss_val, step)
-                    # Log individual loss components
+                    # VoiceFilter-Lite 2020: Log proper metrics (NO SDR!)
                     if hasattr(writer, 'log_training_detailed'):
                         writer.log_training_detailed({
                             'total_loss': total_loss_val,
                             'separation_loss': separation_loss_val,
                             'noise_prediction_loss': noise_loss_val,
                         }, step)
+                    else:
+                        # Fallback to basic logging
+                        writer.log_training(total_loss_val, step)
                     
-                    logger.info(f"Step {step}: Total={total_loss_val:.4f}, "
-                              f"Sep={separation_loss_val:.4f}, Noise={noise_loss_val:.4f}")
+                    logger.info(f"VoiceFilter-Lite 2020 Step {step}:")
+                    logger.info(f"  ✅ Total Loss: {total_loss_val:.4f}")
+                    logger.info(f"  🎯 Separation Loss (Asymmetric L2): {separation_loss_val:.4f}")
+                    logger.info(f"  🗣️  Noise Prediction Loss: {noise_loss_val:.4f}")
+                    logger.info(f"  📊 Next: WER evaluation, NOT SDR!")
 
                 # 1. save checkpoint file to resume training
                 # 2. evaluate and save sample to tensorboard
@@ -190,7 +195,8 @@ def train(args, pt_dir, chkpt_path, trainloader, testloader, writer, logger, hp,
                         'step': step,
                         'hp_str': hp_str,
                     }, save_path)
-                    logger.info("Saved checkpoint to: %s" % save_path)
+                    logger.info("✅ Checkpoint saved: %s" % save_path)
+                    logger.info("🎯 VoiceFilter-Lite 2020: Feature enhancement model")
                     validate(audio, model, embedder, testloader, writer, step, hp)
     except Exception as e:
         logger.info("Exiting due to exception: %s" % e)

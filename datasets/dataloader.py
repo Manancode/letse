@@ -44,15 +44,13 @@ def create_dataloader(hp, args, train):
 class VFDataset(Dataset):
     def __init__(self, hp, args, train):
         def find_all(file_format):
-            search_path = os.path.join(self.data_dir, file_format)
-            results = sorted(glob.glob(search_path))
-            return results
+            return sorted(glob.glob(os.path.join(self.data_dir, file_format)))
             
         self.hp = hp
         self.args = args
         self.train = train
         self.data_dir = hp.data.train_dir if train else hp.data.test_dir
-        
+
         self.dvec_list = find_all(hp.form.dvec)
         self.target_wav_list = find_all(hp.form.target.wav)
         self.mixed_wav_list = find_all(hp.form.mixed.wav)
@@ -103,8 +101,8 @@ class VFDataset(Dataset):
                 return dvec_mel, target_features, mixed_features
             else:
                 # Legacy 2019: Load magnitude spectrograms and convert to features
-                target_mag = torch.load(self.target_mag_list[idx])
-                mixed_mag = torch.load(self.mixed_mag_list[idx])
+            target_mag = torch.load(self.target_mag_list[idx])
+            mixed_mag = torch.load(self.mixed_mag_list[idx])
                 
                 # Convert spectrograms to features on-the-fly (slower but works)
                 target_features = self._spec_to_features(target_mag.numpy())
